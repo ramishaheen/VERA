@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VERA — Verified LLM Interface</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --surface2:  #22263a;
+      --border:    #2d3250;
+      --accent:    #6c63ff;
+      --accent2:   #a78bfa;
+      --green:     #22c55e;
+      --red:       #ef4444;
+      --yellow:    #f59e0b;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --radius:    12px;
+      --font:      'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Header ───────────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 14px; letter-spacing: -1px; color: #fff;
+    }
+
+    .logo h1 {
+      font-size: 18px; font-weight: 700; letter-spacing: 2px;
+      background: linear-gradient(90deg, var(--accent2), #fff);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    .logo-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+    .header-right { display: flex; align-items: center; gap: 12px; }
+
+    /* Toggle switch */
+    .compare-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+    .compare-toggle input { display: none; }
+    .toggle-track {
+      width: 34px; height: 18px;
+      background: var(--border); border-radius: 9px;
+      position: relative; transition: background .2s;
+    }
+    .compare-toggle input:checked + .toggle-track { background: var(--accent); }
+    .toggle-thumb {
+      position: absolute; top: 2px; left: 2px;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #fff; transition: left .2s;
+    }
+    .compare-toggle input:checked + .toggle-track .toggle-thumb { left: 18px; }
+
+    /* Compare view: two columns per turn */
+    .compare-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .compare-col-header {
+      font-size: 10px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; margin-bottom: 4px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .col-vera { color: var(--accent2); }
+    .col-direct { color: var(--muted); }
+
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--muted);
+      transition: background .3s;
+    }
+    .status-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .status-dot.error { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+    .status-label { font-size: 12px; color: var(--muted); }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all .15s;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { background: var(--surface2); border-color: var(--accent); }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: #7c74ff; }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── Main Layout ──────────────────────────────────────────────────── */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      overflow: hidden;
+    }
+
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+      #sidebar { display: none; }
+    }
+
+    /* ── Chat Panel ───────────────────────────────────────────────────── */
+    #chat-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-right: 1px solid var(--border);
+    }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    #messages::-webkit-scrollbar { width: 6px; }
+    #messages::-webkit-scrollbar-track { background: transparent; }
+    #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .welcome {
+      text-align: center;
+      margin: auto;
+      padding: 40px 20px;
+    }
+
+    .welcome-icon {
+      font-size: 48px;
+      display: block;
+      margin-bottom: 16px;
+      filter: drop-shadow(0 0 20px rgba(108,99,255,.4));
+    }
+
+    .welcome h2 { font-size: 22px; font-weight: 600; margin-bottom: 8px; }
+    .welcome p { color: var(--muted); font-size: 14px; max-width: 380px; margin: 0 auto; }
+
+    .welcome-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+
+    .chip {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .chip:hover { border-color: var(--accent); color: var(--accent2); }
+
+    /* ── Messages ─────────────────────────────────────────────────────── */
+    .message { display: flex; gap: 12px; max-width: 100%; }
+    .message.user { flex-direction: row-reverse; }
+
+    .avatar {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; flex-shrink: 0;
+    }
+
+    .avatar.user-av { background: var(--accent); }
+    .avatar.vera-av {
+      background: linear-gradient(135deg, #1e1b4b, var(--accent));
+      font-size: 10px; font-weight: 700; letter-spacing: .5px; color: #fff;
+    }
+
+    .bubble {
+      max-width: calc(100% - 100px);
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .message.user .bubble {
+      background: var(--accent);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .message.vera .bubble {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+
+    .bubble-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 7px;
+      border-radius: 20px;
+      font-size: 11px; font-weight: 500;
+    }
+    .badge.verified { background: rgba(34,197,94,.15); color: var(--green); }
+    .badge.unverified { background: rgba(239,68,68,.15); color: var(--red); }
+
+    /* Typing indicator */
+    .typing-dot {
+      display: inline-flex; gap: 4px; align-items: center; padding: 6px 0;
+    }
+    .typing-dot span {
+      width: 6px; height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: bounce .8s infinite;
+    }
+    .typing-dot span:nth-child(2) { animation-delay: .15s; }
+    .typing-dot span:nth-child(3) { animation-delay: .3s; }
+
+    @keyframes bounce {
+      0%,80%,100% { transform: translateY(0); }
+      40% { transform: translateY(-6px); }
+    }
+
+    /* ── Input Bar ────────────────────────────────────────────────────── */
+    #input-bar {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    #user-input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      padding: 10px 14px;
+      resize: none;
+      min-height: 42px;
+      max-height: 150px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    #user-input:focus { border-color: var(--accent); }
+    #user-input::placeholder { color: var(--muted); }
+
+    #send-btn {
+      width: 42px; height: 42px;
+      border-radius: 10px;
+      background: var(--accent);
+      border: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .15s;
+      flex-shrink: 0;
+    }
+    #send-btn:hover { background: #7c74ff; }
+    #send-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    #send-btn svg { fill: #fff; width: 18px; height: 18px; }
+
+    /* ── Sidebar ──────────────────────────────────────────────────────── */
+    #sidebar {
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      background: var(--surface);
+    }
+
+    #sidebar::-webkit-scrollbar { width: 5px; }
+    #sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .sidebar-section {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-section h3 {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    /* Placeholder card */
+    .placeholder-card {
+      background: var(--surface2);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    /* Metadata card */
+    .meta-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .meta-label { color: var(--muted); }
+
+    .meta-value { font-weight: 600; }
+
+    .conf-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    .conf-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--green));
+      border-radius: 2px;
+      transition: width .5s ease;
+    }
+
+    /* Execution graph tree */
+    .task-list { display: flex; flex-direction: column; gap: 6px; }
+
+    .task-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+
+    .task-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .task-type-badge {
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .type-math { background: rgba(245,158,11,.2); color: var(--yellow); }
+    .type-fact { background: rgba(108,99,255,.2); color: var(--accent2); }
+    .type-semantic { background: rgba(34,197,94,.15); color: var(--green); }
+    .type-logic { background: rgba(239,68,68,.15); color: var(--red); }
+    .type-unknown { background: var(--border); color: var(--muted); }
+
+    .task-content { color: var(--muted); line-height: 1.4; }
+    .task-result { color: var(--text); margin-top: 4px; font-weight: 500; }
+
+    details > summary {
+      cursor: pointer;
+      list-style: none;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 6px 0;
+    }
+    details > summary::before { content: "▸ "; }
+    details[open] > summary::before { content: "▾ "; }
+
+    pre.json-tree {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 11px;
+      overflow: auto;
+      max-height: 200px;
+      color: var(--muted);
+    }
+
+    /* ── Modal ────────────────────────────────────────────────────────── */
+    #modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #modal-overlay.open { display: flex; }
+
+    #modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: min(480px, 90vw);
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h2 { font-size: 18px; font-weight: 600; }
+
+    .modal-close {
+      background: none; border: none;
+      color: var(--muted); cursor: pointer; font-size: 20px;
+      line-height: 1;
+    }
+    .modal-close:hover { color: var(--text); }
+
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+
+    .form-group label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+
+    .form-group input,
+    .form-group select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .form-group input:focus,
+    .form-group select:focus { border-color: var(--accent); }
+
+    .form-group input::placeholder { color: var(--muted); }
+
+    select option { background: var(--surface2); }
+
+    .provider-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+
+    .provider-card {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .15s;
+      font-size: 12px;
+    }
+
+    .provider-card:hover { border-color: var(--accent); }
+    .provider-card.selected { border-color: var(--accent); background: rgba(108,99,255,.1); }
+    .provider-card .pi { font-size: 22px; display: block; margin-bottom: 4px; }
+    .provider-card span { color: var(--muted); }
+
+    .form-hint {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: -2px;
+    }
+
+    .modal-footer {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 200;
+    }
+
+    .toast {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      animation: slide-in .2s ease;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4);
+    }
+
+    .toast.success { border-left: 3px solid var(--green); }
+    .toast.error { border-left: 3px solid var(--red); }
+
+    @keyframes slide-in {
+      from { transform: translateX(20px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Server warning banner ─────────────────────────────────────────── -->
+<div id="file-warning" style="display:none;background:#7c2d12;color:#fed7aa;padding:10px 24px;font-size:13px;text-align:center;flex-shrink:0">
+  ⚠ You opened this file directly. API calls will go to <strong>http://localhost:8000</strong>.
+  For best results, run <code style="background:rgba(0,0,0,.3);padding:2px 6px;border-radius:4px">py -3 run.py</code> and open the URL it prints.
+</div>
+
+<!-- ── Header ────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">V∑</div>
+    <div>
+      <h1>VERA</h1>
+      <div class="logo-sub">Verification · Execution · Reasoning · Arbitration</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-dot" id="status-dot"></div>
+    <span class="status-label" id="status-label">Not configured</span>
+    <label class="compare-toggle" title="Show VERA vs direct LLM side by side">
+      <input type="checkbox" id="compare-mode" />
+      <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      <span style="font-size:12px;color:var(--muted)">Compare</span>
+    </label>
+    <button class="btn btn-ghost" id="settings-btn">⚙ Settings</button>
+    <button class="btn btn-ghost" id="clear-btn">🗑 Clear</button>
+  </div>
+</header>
+
+<!-- ── Main ───────────────────────────────────────────────────────────── -->
+<main>
+
+  <!-- Chat Panel -->
+  <div id="chat-panel">
+    <div id="messages">
+      <div class="welcome" id="welcome">
+        <span class="welcome-icon">🧠</span>
+        <h2>VERA — Verified LLM Interface</h2>
+        <p>Every response is segmented, routed through the optimal engine, and verified before delivery. Configure your LLM in Settings to begin.</p>
+        <div class="welcome-chips">
+          <div class="chip" onclick="sendExample(this)">Calculate compound interest on $10,000 at 5% for 3 years</div>
+          <div class="chip" onclick="sendExample(this)">Who is Marie Curie?</div>
+          <div class="chip" onclick="sendExample(this)">What is 15% of 2,500?</div>
+          <div class="chip" onclick="sendExample(this)">Draft a professional email requesting a project extension</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="input-bar">
+      <textarea id="user-input" placeholder="Ask VERA anything…" rows="1"></textarea>
+      <button id="send-btn" title="Send (Enter)">
+        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div class="sidebar-section">
+      <h3>VERA Metadata</h3>
+      <div id="meta-placeholder" class="placeholder-card">
+        Send a message to see verification details
+      </div>
+      <div id="meta-content" style="display:none">
+        <div class="meta-card">
+          <div class="meta-row">
+            <span class="meta-label">Status</span>
+            <span id="meta-verified"></span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Confidence</span>
+            <span class="meta-value" id="meta-confidence"></span>
+          </div>
+          <div class="conf-bar"><div class="conf-fill" id="meta-conf-fill" style="width:0%"></div></div>
+          <div class="meta-row">
+            <span class="meta-label">Latency</span>
+            <span class="meta-value" id="meta-latency"></span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Model</span>
+            <span class="meta-value" id="meta-model"></span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Tasks</span>
+            <span class="meta-value" id="meta-tasks"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Execution Graph</h3>
+      <div id="graph-placeholder" class="placeholder-card">
+        No execution data yet
+      </div>
+      <div id="graph-content" style="display:none">
+        <div class="task-list" id="task-list"></div>
+        <details style="margin-top:10px">
+          <summary>Raw JSON</summary>
+          <pre class="json-tree" id="raw-json"></pre>
+        </details>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Verification Results</h3>
+      <div id="vr-placeholder" class="placeholder-card">
+        No verification data yet
+      </div>
+      <div class="task-list" id="vr-list" style="display:none"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Settings Modal ─────────────────────────────────────────────────── -->
+<div id="modal-overlay">
+  <div id="modal">
+    <div class="modal-header">
+      <h2>⚙ LLM Configuration</h2>
+      <button class="modal-close" id="modal-close">✕</button>
+    </div>
+
+    <div class="form-group">
+      <label>Provider</label>
+      <div class="provider-row">
+        <div class="provider-card selected" id="prov-openai" onclick="selectProvider('openai')">
+          <span class="pi">🌐</span>
+          <strong>OpenAI</strong>
+          <br><span>Cloud API</span>
+        </div>
+        <div class="provider-card" id="prov-lmstudio" onclick="selectProvider('lmstudio')">
+          <span class="pi">🖥️</span>
+          <strong>LM Studio</strong>
+          <br><span>Local model</span>
+        </div>
+        <div class="provider-card" id="prov-custom" onclick="selectProvider('custom')">
+          <span class="pi">🔧</span>
+          <strong>Custom</strong>
+          <br><span>Any endpoint</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group" id="api-key-group">
+      <label>API Key</label>
+      <input type="password" id="api-key-input" placeholder="sk-…" autocomplete="off" />
+      <div class="form-hint" id="api-key-hint">Your OpenAI secret key. Never sent to any third party.</div>
+    </div>
+
+    <div class="form-group" id="base-url-group" style="display:none">
+      <label>LM Studio / Server URL</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="base-url-input" placeholder="http://192.168.100.39:1234" style="flex:1" />
+        <button class="btn btn-ghost" id="fetch-models-btn" onclick="fetchModels()" style="white-space:nowrap;flex-shrink:0">
+          🔍 Fetch Models
+        </button>
+      </div>
+      <div class="form-hint" id="base-url-hint">
+        Paste your LM Studio URL (with or without /v1). Click "Fetch Models" to auto-detect the loaded model.
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Model</label>
+      <select id="model-select">
+        <optgroup label="OpenAI">
+          <option value="gpt-4o-mini">gpt-4o-mini (recommended)</option>
+          <option value="gpt-4o">gpt-4o</option>
+          <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+          <option value="gpt-4.1">gpt-4.1</option>
+          <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+        </optgroup>
+        <optgroup label="LM Studio / Local" id="lmstudio-models-group">
+          <option value="llama-3.2-1b-instruct">llama-3.2-1b-instruct</option>
+          <option value="llama-3.2-3b-instruct">llama-3.2-3b-instruct</option>
+          <option value="mistral-7b-instruct">mistral-7b-instruct</option>
+          <option value="phi-3-mini-128k">phi-3-mini-128k</option>
+        </optgroup>
+        <optgroup label="Custom">
+          <option value="custom-model">custom-model</option>
+        </optgroup>
+      </select>
+      <div class="form-hint" id="model-hint" style="display:none;color:var(--green)"></div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save">Save & Connect</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ──────────────────────────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<script>
+/* ── State ─────────────────────────────────────────────────────────────── */
+let currentProvider = 'openai';
+let isProcessing = false;
+
+// If opened as a file:// URL, point to the VERA server explicitly.
+// When served through the server (http://...), use relative paths.
+const API_BASE = window.location.protocol === 'file:'
+  ? 'http://localhost:8000'
+  : '';
+
+/* ── Init ──────────────────────────────────────────────────────────────── */
+window.addEventListener('DOMContentLoaded', async () => {
+  // Show warning if opened as a local file
+  if (window.location.protocol === 'file:') {
+    document.getElementById('file-warning').style.display = 'block';
+  }
+  autoResizeTextarea();
+  await loadCurrentConfig();
+  document.getElementById('user-input').addEventListener('keydown', onKeyDown);
+  document.getElementById('send-btn').addEventListener('click', sendMessage);
+  document.getElementById('settings-btn').addEventListener('click', openModal);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+  document.getElementById('modal-save').addEventListener('click', saveConfig);
+  document.getElementById('clear-btn').addEventListener('click', clearChat);
+});
+
+/* ── Config ─────────────────────────────────────────────────────────────── */
+async function loadCurrentConfig() {
+  try {
+    const res = await fetch(API_BASE + '/api/config');
+    if (!res.ok) return;
+    const cfg = await res.json();
+    if (cfg.api_key_set) {
+      setStatus('connected', `${cfg.model} · ${cfg.provider}`);
+    }
+    if (cfg.model) document.getElementById('model-select').value = cfg.model;
+    if (cfg.base_url) {
+      document.getElementById('base-url-input').value = cfg.base_url;
+      if (cfg.provider === 'lm_studio') selectProvider('lmstudio');
+      else if (cfg.provider === 'custom') selectProvider('custom');
+    }
+  } catch {}
+}
+
+/* ── Provider selection ─────────────────────────────────────────────────── */
+function selectProvider(p) {
+  currentProvider = p;
+  document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById(`prov-${p}`).classList.add('selected');
+
+  const baseGroup = document.getElementById('base-url-group');
+  const apiGroup = document.getElementById('api-key-group');
+  const hint = document.getElementById('api-key-hint');
+
+  if (p === 'lmstudio') {
+    baseGroup.style.display = 'flex';
+    // Don't overwrite if the user already typed something
+    if (!document.getElementById('base-url-input').value) {
+      document.getElementById('base-url-input').value = '';
+    }
+    document.getElementById('base-url-hint').textContent =
+      'Paste your LM Studio URL (e.g. http://192.168.100.39:1234). Click "Fetch Models" to auto-detect.';
+    apiGroup.style.display = 'flex';
+    hint.textContent = 'LM Studio accepts any API key value (e.g. "lm-studio").';
+    document.getElementById('api-key-input').value = 'lm-studio';
+    document.getElementById('model-select').value = 'llama-3.2-1b-instruct';
+  } else if (p === 'custom') {
+    baseGroup.style.display = 'flex';
+    document.getElementById('base-url-input').value = '';
+    apiGroup.style.display = 'flex';
+    hint.textContent = 'API key for your custom endpoint.';
+  } else {
+    baseGroup.style.display = 'none';
+    apiGroup.style.display = 'flex';
+    hint.textContent = 'Your OpenAI secret key. Never sent to any third party.';
+    document.getElementById('api-key-input').value = '';
+  }
+}
+
+async function fetchModels() {
+  const rawUrl = document.getElementById('base-url-input').value.trim();
+  if (!rawUrl) {
+    toast('✗ Enter the LM Studio URL first (e.g. http://192.168.100.39:1234)', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('fetch-models-btn');
+  btn.textContent = '⏳ Fetching…';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(API_BASE + '/api/fetch-models', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        base_url: rawUrl,
+        api_key: document.getElementById('api-key-input').value.trim() || 'lm-studio',
+      }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.detail || 'Failed to reach LM Studio');
+
+    // Update the base URL to the normalised version (with /v1)
+    document.getElementById('base-url-input').value = data.base_url;
+
+    // Rebuild the LM Studio models group
+    const group = document.getElementById('lmstudio-models-group');
+    group.innerHTML = '';
+    data.models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = m;
+      group.appendChild(opt);
+    });
+
+    // Auto-select the first model
+    if (data.models.length > 0) {
+      document.getElementById('model-select').value = data.models[0];
+      const hint = document.getElementById('model-hint');
+      hint.textContent = `✓ Found ${data.models.length} model(s) — auto-selected: ${data.models[0]}`;
+      hint.style.display = 'block';
+    }
+
+    toast(`✓ Connected to LM Studio — ${data.models.length} model(s) found`, 'success');
+  } catch (e) {
+    toast('✗ ' + e.message, 'error');
+  } finally {
+    btn.textContent = '🔍 Fetch Models';
+    btn.disabled = false;
+  }
+}
+
+function openModal() {
+  document.getElementById('modal-overlay').classList.add('open');
+  document.getElementById('api-key-input').focus();
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+async function saveConfig() {
+  const apiKey = document.getElementById('api-key-input').value.trim();
+  const model = document.getElementById('model-select').value;
+  const baseUrl = document.getElementById('base-url-input').value.trim();
+
+  const payload = { model };
+  if (apiKey) payload.api_key = apiKey;
+  if (baseUrl) payload.base_url = baseUrl;
+
+  document.getElementById('modal-save').disabled = true;
+  document.getElementById('modal-save').textContent = 'Connecting…';
+
+  try {
+    const res = await fetch(API_BASE + '/api/configure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Configuration failed');
+
+    setStatus('connected', `${data.model} · ${data.provider}`);
+    closeModal();
+    toast('✓ Connected — ' + data.model, 'success');
+  } catch (e) {
+    setStatus('error', 'Config error');
+    toast('✗ ' + e.message, 'error');
+  } finally {
+    document.getElementById('modal-save').disabled = false;
+    document.getElementById('modal-save').textContent = 'Save & Connect';
+  }
+}
+
+/* ── Status ─────────────────────────────────────────────────────────────── */
+function setStatus(state, label) {
+  const dot = document.getElementById('status-dot');
+  const lbl = document.getElementById('status-label');
+  dot.className = 'status-dot ' + state;
+  lbl.textContent = label;
+}
+
+/* ── Chat ───────────────────────────────────────────────────────────────── */
+function onKeyDown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function sendExample(el) {
+  document.getElementById('user-input').value = el.textContent.trim();
+  sendMessage();
+}
+
+async function sendMessage() {
+  if (isProcessing) return;
+  const input = document.getElementById('user-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  // Remove welcome screen
+  document.getElementById('welcome')?.remove();
+
+  input.value = '';
+  input.style.height = 'auto';
+
+  appendMessage('user', text);
+  const typingEl = appendTyping();
+  isProcessing = true;
+  document.getElementById('send-btn').disabled = true;
+
+  const compareMode = document.getElementById('compare-mode').checked;
+
+  try {
+    if (compareMode) {
+      // ── Compare mode: call /api/compare, show both responses ──
+      const res = await fetch(API_BASE + '/api/compare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: document.getElementById('model-select').value || 'gpt-4o-mini',
+          messages: [{ role: 'user', content: text }],
+        }),
+      });
+
+      const data = await res.json();
+      typingEl.remove();
+
+      if (!res.ok) {
+        appendMessage('vera', '⚠ Error: ' + (data.detail || 'Unknown error'), null);
+        toast('✗ ' + (data.detail || 'Error'), 'error');
+        return;
+      }
+
+      appendCompareMessage(data.vera, data.direct);
+      updateSidebar(data.vera);
+
+    } else {
+      // ── Normal mode: VERA only ──
+      const res = await fetch(API_BASE + '/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: document.getElementById('model-select').value || 'gpt-4o-mini',
+          messages: [{ role: 'user', content: text }],
+        }),
+      });
+
+      const data = await res.json();
+      typingEl.remove();
+
+      if (!res.ok) {
+        const errMsg = data.detail || 'Unknown error from VERA server';
+        appendMessage('vera', '⚠ Error: ' + errMsg, null);
+        toast('✗ ' + errMsg, 'error');
+        return;
+      }
+
+      const content = data.choices[0].message.content;
+      const meta = data.vera_metadata;
+      appendMessage('vera', content, meta);
+      updateSidebar(meta);
+    }
+  } catch (e) {
+    typingEl.remove();
+    appendMessage('vera', '⚠ Could not reach VERA server. Is it running?', null);
+    toast('✗ Connection error', 'error');
+    setStatus('error', 'Disconnected');
+  } finally {
+    isProcessing = false;
+    document.getElementById('send-btn').disabled = false;
+    input.focus();
+  }
+}
+
+function appendMessage(role, content, meta) {
+  const container = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = `message ${role}`;
+
+  const avatar = document.createElement('div');
+  avatar.className = `avatar ${role === 'user' ? 'user-av' : 'vera-av'}`;
+  avatar.textContent = role === 'user' ? '👤' : 'VERA';
+
+  const bubbleWrap = document.createElement('div');
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = content;
+  bubbleWrap.appendChild(bubble);
+
+  if (meta && role === 'vera') {
+    const metaLine = document.createElement('div');
+    metaLine.className = 'bubble-meta';
+    metaLine.innerHTML = `
+      <span class="badge ${meta.verified ? 'verified' : 'unverified'}">
+        ${meta.verified ? '✓ Verified' : '✗ Unverified'}
+      </span>
+      <span>Confidence: ${(meta.confidence * 100).toFixed(0)}%</span>
+      <span>·</span>
+      <span>${meta.latency_ms.toFixed(0)}ms</span>
+    `;
+    bubbleWrap.appendChild(metaLine);
+  }
+
+  div.appendChild(avatar);
+  div.appendChild(bubbleWrap);
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div;
+}
+
+function appendCompareMessage(vera, direct) {
+  const container = document.getElementById('messages');
+  const wrap = document.createElement('div');
+  wrap.className = 'compare-row';
+
+  // VERA column
+  const veraCol = document.createElement('div');
+  veraCol.innerHTML = `
+    <div class="compare-col-header col-vera">
+      <span>🧠 VERA</span>
+      <span class="badge ${vera.verified ? 'verified' : 'unverified'}" style="font-size:10px">
+        ${vera.verified ? '✓ Verified' : '✗ Unverified'}
+      </span>
+      <span style="font-size:10px;color:var(--muted)">${(vera.confidence*100).toFixed(0)}% · ${vera.latency_ms.toFixed(0)}ms</span>
+    </div>
+    <div class="bubble" style="background:var(--surface2);border:1px solid var(--border);border-bottom-left-radius:4px;white-space:pre-wrap;word-break:break-word">${escHtml(vera.response)}</div>
+  `;
+
+  // Direct LLM column
+  const directCol = document.createElement('div');
+  directCol.innerHTML = `
+    <div class="compare-col-header col-direct">
+      <span>⚡ Direct LLM</span>
+      <span style="font-size:10px;color:var(--muted)">No verification</span>
+    </div>
+    <div class="bubble" style="background:var(--surface2);border:1px dashed var(--border);opacity:.85;white-space:pre-wrap;word-break:break-word">${escHtml(direct.response)}</div>
+  `;
+
+  wrap.appendChild(veraCol);
+  wrap.appendChild(directCol);
+  container.appendChild(wrap);
+  container.scrollTop = container.scrollHeight;
+}
+
+function appendTyping() {
+  const container = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'message vera';
+  div.innerHTML = `
+    <div class="avatar vera-av">VERA</div>
+    <div class="bubble">
+      <div class="typing-dot"><span></span><span></span><span></span></div>
+    </div>
+  `;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div;
+}
+
+function clearChat() {
+  const container = document.getElementById('messages');
+  container.innerHTML = '';
+  document.getElementById('meta-placeholder').style.display = 'block';
+  document.getElementById('meta-content').style.display = 'none';
+  document.getElementById('graph-placeholder').style.display = 'block';
+  document.getElementById('graph-content').style.display = 'none';
+  document.getElementById('vr-placeholder').style.display = 'block';
+  document.getElementById('vr-list').style.display = 'none';
+}
+
+/* ── Sidebar ────────────────────────────────────────────────────────────── */
+function updateSidebar(meta) {
+  if (!meta) return;
+
+  // Metadata card
+  document.getElementById('meta-placeholder').style.display = 'none';
+  document.getElementById('meta-content').style.display = 'block';
+
+  const verifiedEl = document.getElementById('meta-verified');
+  verifiedEl.innerHTML = `<span class="badge ${meta.verified ? 'verified' : 'unverified'}">${meta.verified ? '✓ Verified' : '✗ Unverified'}</span>`;
+
+  const pct = (meta.confidence * 100).toFixed(1);
+  document.getElementById('meta-confidence').textContent = pct + '%';
+  document.getElementById('meta-conf-fill').style.width = pct + '%';
+  document.getElementById('meta-latency').textContent = meta.latency_ms.toFixed(0) + 'ms';
+  document.getElementById('meta-model').textContent = meta.model_used || '—';
+  document.getElementById('meta-tasks').textContent = Object.keys(meta.execution_graph?.tasks || {}).length;
+
+  // Execution graph
+  const tasks = meta.execution_graph?.tasks || {};
+  const order = meta.execution_graph?.execution_order || [];
+
+  document.getElementById('graph-placeholder').style.display = 'none';
+  document.getElementById('graph-content').style.display = 'block';
+  document.getElementById('raw-json').textContent = JSON.stringify(meta.execution_graph, null, 2);
+
+  const taskList = document.getElementById('task-list');
+  taskList.innerHTML = '';
+  order.forEach(tid => {
+    const t = tasks[tid];
+    if (!t) return;
+    const div = document.createElement('div');
+    div.className = 'task-item';
+    div.innerHTML = `
+      <div class="task-item-header">
+        <span class="task-type-badge type-${t.type}">${t.type}</span>
+        <span style="font-size:10px;color:var(--muted)">${t.engine?.replace('_engine','').replace('_',' ') || '?'}</span>
+      </div>
+      <div class="task-content">${escHtml(t.content)}</div>
+      ${t.result ? `<div class="task-result">${escHtml(t.result.substring(0, 120))}${t.result.length > 120 ? '…' : ''}</div>` : ''}
+    `;
+    taskList.appendChild(div);
+  });
+
+  // Verification results
+  const vrList = document.getElementById('vr-list');
+  const vrItems = meta.verification_results || [];
+  if (vrItems.length) {
+    document.getElementById('vr-placeholder').style.display = 'none';
+    vrList.style.display = 'flex';
+    vrList.innerHTML = '';
+    vrItems.forEach(vr => {
+      const div = document.createElement('div');
+      div.className = 'task-item';
+      div.innerHTML = `
+        <div class="task-item-header">
+          <span class="badge ${vr.verified ? 'verified' : 'unverified'}" style="font-size:10px">${vr.verified ? '✓' : '✗'} ${vr.task_id}</span>
+          <span style="font-size:10px;color:var(--muted)">${(vr.confidence * 100).toFixed(0)}%</span>
+        </div>
+        <div class="task-content">${escHtml(vr.details)}</div>
+      `;
+      vrList.appendChild(div);
+    });
+  }
+}
+
+/* ── Helpers ────────────────────────────────────────────────────────────── */
+function autoResizeTextarea() {
+  const ta = document.getElementById('user-input');
+  ta.addEventListener('input', () => {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 150) + 'px';
+  });
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function toast(msg, type = 'success') {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# VERA — Production Requirements
+# Install with: pip install -r requirements.txt
+
+# Web framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+aiofiles==23.2.1
+
+# Data validation
+pydantic==2.7.4
+
+# LLM
+openai>=1.40.0
+
+# Math engine (deterministic sandbox)
+sympy>=1.13.3
+
+# Graph / DAG
+networkx==3.3
+
+# HTTP (Wikipedia RAG)
+requests==2.32.3
+
+# Environment variables
+python-dotenv==1.0.1
